@@ -27,7 +27,7 @@ The project is structured as a TypeScript **monorepo** utilizing the following c
 
 ### 3. Backend Application (`apps/backend`)
 *   **Framework:** Express.js (running on port `3001`).
-*   **Database & ORM:** PostgreSQL database managed via [Prisma ORM](https://www.prisma.io/).
+*   **Database & ORM:** PostgreSQL database managed via [Sequelize ORM](https://sequelize.org/) using asynchronous operations.
 *   **AI Integrations:**
     *   **OpenAI WebRTC Realtime API:** Proxies the WebRTC SDP (Session Description Protocol) handshake from the frontend browser to OpenAI (`https://api.openai.com/v1/realtime/calls`).
     *   **OpenAI Realtime WebSocket API:** Initiates a secondary WebSocket connection (`sideband.ts`) targeting the WebRTC `call_id` to dynamically update system instructions (system prompts injected with scraped GitHub metadata) and capture the AI's spoken transcripts.
@@ -46,11 +46,13 @@ ai-interviewer/
 ├── turbo.json                 # Turborepo task configuration
 ├── apps/
 │   ├── backend/
-│   │   ├── prisma/
-│   │   │   └── schema.prisma  # PostgreSQL Database Schema
+│   │   ├── models/
+│   │   │   ├── index.ts       # Sequelize Database Connection Helper & Associations
+│   │   │   ├── Interview.ts   # Interview Model Definition
+│   │   │   └── Message.ts     # Message Model Definition
 │   │   ├── scrapers/
 │   │   │   └── github.ts      # Scrapes Candidate GitHub Repository Metadata
-│   │   ├── db.ts              # Prisma Client Instantiation
+│   │   ├── db.ts              # Sequelize Connection Initialization
 │   │   ├── index.ts           # Main Express Server Entrypoint
 │   │   ├── index2.js          # Independent LinkedIn Scraper (Playwright & Bun server)
 │   │   ├── result.ts          # Gemini Evaluation logic
@@ -185,19 +187,20 @@ To build an identical project from scratch, follow these modular phases:
 3. Initialize a Turborepo pipeline (`turbo.json`) to run build and dev configurations.
 4. Set up shared configurations (TypeScript, Prettier, ESLint) inside your `packages/` directory so apps can import standard configurations.
 
-### Phase 2: Design the Database Schema
+### Phase 2: Design the Database Schema & ORM Setup
 1. Create `apps/backend` and run:
    ```bash
    bun init
-   bun install prisma @prisma/client @prisma/adapter-pg pg express cors dotenv zod zod-to-json-schema axios
-   npx prisma init
+   bun install sequelize pg pg-hstore express cors dotenv zod zod-to-json-schema axios
+   bun install -d @types/validator
    ```
-2. Define the schema in `schema.prisma` containing:
-    * An `Interview` model (storing GitHub metadata json, score, feedback, status).
-    * A `Message` model (storing the message string, type (User/Assistant), relation to Interview, and timestamp).
-3. Connect your PostgreSQL database and run migrations:
-   ```bash
-   npx prisma migrate dev --name init
+2. Define models and schemas using Sequelize with async operations:
+    * **`Interview` model** (storing GitHub metadata JSON, score, feedback, status).
+    * **`Message` model** (storing the message string, type (User/Assistant), relation to Interview, and timestamp).
+3. Connect your PostgreSQL database, define associations (e.g., `Interview.hasMany(Message)` and `Message.belongsTo(Interview)`), and synchronize models asynchronously:
+   ```typescript
+   // models/index.ts
+   await sequelize.sync({ alter: true });
    ```
 
 ### Phase 3: Implement WebRTC & AI Integrations in the Backend
