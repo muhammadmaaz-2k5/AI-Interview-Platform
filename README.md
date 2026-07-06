@@ -1,197 +1,246 @@
-# 🤖 AI Interview Platform
+# AI Interviewer - Project Analysis & Replication Guide
 
-An advanced, real-time AI-powered technical and communication interview platform. The platform ingests candidate resumes, conducts interactive voice-and-video interviews using dynamic AI avatars, evaluates responses in real-time, and generates multi-dimensional performance reports.
-
----
-
-## 🚀 Implementation Approaches
-
-We have designed two architectural approaches for the platform's execution, depending on latency requirements and budget considerations:
-
-### 📋 Platform Entry & Core Requirements
-The platform's entry workflow involves resume parsing and launching the live WebRTC video interview.
-
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/e57c224e-7543-4ae2-b0cb-d25690e9f1d5" alt="Platform Entry & Requirements" width="85%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);" />
-</p>
+This document provides a comprehensive analysis of the **AI Interviewer** project. It details the architecture, the technology stack, the exact workflow of how it works under the hood, and provides a guide on how you can build a similar project from scratch.
 
 ---
 
-### 🐢 Approach 1: Pipeline-Based (Cost-Effective but Slower)
-This architecture relies on a sequential pipeline (STT ➡️ LLM ➡️ TTS ➡️ Avatar Generator). While highly cost-effective and easily customizable, it operates on a turn-based dialogue pattern with higher transition latency.
+## 🛠️ Technology Stack
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/d0ecba26-e9db-4550-9cb6-0a7087779f0f" alt="Approach 1: Pipeline-Based Architecture" width="90%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);" />
-</p>
+The project is structured as a TypeScript **monorepo** utilizing the following core technologies:
+
+### 1. Monorepo & Build Tooling
+*   **Package Manager:** [Bun](https://bun.sh/) (version `1.3.11`) - used for installing dependencies, running workspaces, and acting as the JS runtime.
+*   **Orchestration:** [Turborepo](https://turbo.build/) - manages the workspace commands (`build`, `dev`, `lint`) across apps and shared packages.
+*   **Workspaces:**
+    *   `apps/frontend` (React web app)
+    *   `apps/backend` (Express server & database layer)
+    *   `packages/` (Shared configuration packages: `eslint-config`, `typescript-config`, `ui`)
+
+### 2. Frontend Application (`apps/frontend`)
+*   **Framework:** React 19 with client-side routing via [React Router v7](https://reactrouter.com/).
+*   **Server/Router:** Runs on Bun's built-in HTTP server (`Bun.serve`) with native HMR (Hot Module Replacement) and bundling.
+*   **Styling:** Tailwind CSS, Radix UI primitives, Lucide React (icons), and [Sonner](https://sonner.emilkowal.ski/) (for notifications).
+*   **Real-time Media:**
+    *   **WebRTC Peer Connection:** Establishes direct audio streaming between the user's browser and the OpenAI Realtime servers.
+    *   **WebSockets + Deepgram:** Transcribes the candidate's mic input in real-time by streaming audio chunks (`audio/webm` via WebM `MediaRecorder`) directly to the Deepgram API (`wss://api.deepgram.com/v1/listen`).
+*   **Reactive Visuals:** Custom SVG visualizer (`VoiceOrb`) animating dynamically based on volume levels computed using the Web Audio API.
+
+### 3. Backend Application (`apps/backend`)
+*   **Framework:** Express.js (running on port `3001`).
+*   **Database & ORM:** PostgreSQL database managed via [Prisma ORM](https://www.prisma.io/).
+*   **AI Integrations:**
+    *   **OpenAI WebRTC Realtime API:** Proxies the WebRTC SDP (Session Description Protocol) handshake from the frontend browser to OpenAI (`https://api.openai.com/v1/realtime/calls`).
+    *   **OpenAI Realtime WebSocket API:** Initiates a secondary WebSocket connection (`sideband.ts`) targeting the WebRTC `call_id` to dynamically update system instructions (system prompts injected with scraped GitHub metadata) and capture the AI's spoken transcripts.
+    *   **Google Gemini API:** Uses `@google/genai` (with `gemini-3.5-flash`) to analyze the full conversational transcript from the database and returns structured JSON containing feedback and a score out of 10.
+*   **Web Scraping / GitHub Integration:** Fetches candidate profile repository metadata from GitHub via the public REST API (supported by an optional HTTPS Proxy Agent).
 
 ---
 
-### ⚡ Approach 2: End-to-End Voice Models (Premium & Ultra-Fast)
-This architecture streams real-time audio from the browser to an end-to-end native voice model (e.g., Gemini Live API / GPT-4o Realtime) via a WebRTC server. It offers a near-zero latency, human-like conversational experience but incurs higher streaming costs.
+## 📂 Project Architecture & Codebase Map
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/ab9a917d-1633-4713-8b56-ef5fdd3d4498" alt="Approach 2: Native Voice Model Architecture" width="90%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);" />
-</p>
+Here is how the directories are laid out:
 
-
-## 🏗️ System Architecture
-
-The following diagram illustrates the high-level system architecture, from client interaction to backend services and the real-time AI pipeline.
-
-```mermaid
-graph TB
-    %% Styling definitions
-    classDef client fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#01579b;
-    classDef gateway fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#1b5e20;
-    classDef core fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#e65100;
-    classDef ai fill:#ede7f6,stroke:#4a148c,stroke-width:2px,color:#4a148c;
-    classDef storage fill:#eceff1,stroke:#37474f,stroke-width:2px,color:#37474f;
-
-    subgraph ClientLayer ["Client Layer (WebRTC enabled)"]
-        A["Candidate UI (Browser)"]:::client
-        B["Interviewer Dashboard"]:::client
-    end
-
-    subgraph GatewayLayer ["Gateway & Orchestration"]
-        API["API Gateway / Load Balancer"]:::gateway
-        Orch["Interview Session Orchestrator"]:::gateway
-    end
-
-    subgraph CoreServices ["Core Services"]
-        Parser["Resume Parser Service"]:::core
-        Auth["Auth & User Service"]:::core
-        ReportGen["Report Evaluation Engine"]:::core
-    end
-
-    subgraph AIPipeline ["AI Pipeline (Real-Time Async)"]
-        STT["Speech-to-Text (STT)"]:::ai
-        LLM["AI Interviewer (LLM/SLM)"]:::ai
-        TTS["Text-to-Speech (TTS)"]:::ai
-        Avatar["Avatar/Video Generator"]:::ai
-    end
-
-    subgraph StorageLayer ["Storage & Database"]
-        DB[("Application DB <br/> (Profiles, Transcripts)")]:::storage
-        S3["Object Storage <br/> (Resumes, Video Recordings)"]:::storage
-    end
-
-    %% Client connections
-    A -->|Upload Resume / WebRTC Stream| API
-    B -->|View Reports / Manage| API
-
-    %% Gateway to services
-    API --> Orch
-    API --> Parser
-    API --> Auth
-
-    %% Services interactions
-    Parser -->|Extract Profiles| DB
-    Parser -->|Store PDFs| S3
-    
-    %% Orchestration to AI Pipeline
-    Orch -->|WebRTC Audio/Video| STT
-    STT -->|Transcribed Text| LLM
-    LLM -->|Evaluate & Gen Follow-up| TTS
-    TTS -->|Synthesis Audio| Avatar
-    Avatar -->|Real-Time Avatar Stream| Orch
-    Orch -->|Stream to Candidate| A
-
-    %% Session saving
-    Orch -->|Save Transcript & Record| DB
-    Orch -->|Save Video Files| S3
-
-    %% Report Generation
-    ReportGen -->|Process Transcripts| DB
-    ReportGen -->|Output Evaluation| B
+```
+ai-interviewer/
+├── package.json               # Root monorepo configuration (Bun Workspaces)
+├── turbo.json                 # Turborepo task configuration
+├── apps/
+│   ├── backend/
+│   │   ├── prisma/
+│   │   │   └── schema.prisma  # PostgreSQL Database Schema
+│   │   ├── scrapers/
+│   │   │   └── github.ts      # Scrapes Candidate GitHub Repository Metadata
+│   │   ├── db.ts              # Prisma Client Instantiation
+│   │   ├── index.ts           # Main Express Server Entrypoint
+│   │   ├── index2.js          # Independent LinkedIn Scraper (Playwright & Bun server)
+│   │   ├── result.ts          # Gemini Evaluation logic
+│   │   ├── sideband.ts        # OpenAI Realtime WebSocket Session Handler
+│   │   └── types.ts           # Shared Zod validation schemas
+│   └── frontend/
+│       ├── build.ts           # Custom frontend build script utilizing Bun.build
+│       ├── package.json       # Frontend dependencies (React, Router, Tailwind)
+│       └── src/
+│           ├── index.html     # HTML entry point (mounting React)
+│           ├── index.ts       # Bun.serve file serving index.html and acting as router
+│           ├── frontend.tsx   # React Mounting Point
+│           ├── App.tsx        # React Root with App Routes
+│           └── components/    
+│               ├── Form.tsx       # Pre-Interview Form (GitHub link capture)
+│               ├── Interview.tsx  # Core WebRTC / Deepgram streaming UI
+│               ├── Result.tsx     # Final score & Feedback presentation
+│               └── VoiceOrb.tsx   # Audio Level Animation Visualizer
+└── packages/                  # Shared Configuration and UI
+    ├── eslint-config/
+    ├── typescript-config/
+    └── ui/
+        └── src/
+            ├── button.tsx
+            ├── card.tsx
+            └── code.tsx
 ```
 
 ---
 
-## 🔄 Interactive Interview Flow
+## 🔄 End-to-End Workflow: How it Works
 
-The interview process operates in a closed-loop system powered by WebRTC for low latency communication. The candidate interacts directly with a speaking AI avatar that dynamically changes its questions based on candidate answers and profile context.
+The application operates in three main stages:
+
+### Stage 1: Onboarding (`/` -> `Form.tsx`)
+1. The user inputs their GitHub profile URL (e.g., `https://github.com/john-doe`).
+2. The frontend sends a `POST /api/v1/pre-interview` request to the backend.
+3. The backend:
+    * Extracts the username from the URL.
+    * Queries the GitHub API to fetch metadata about the user's public repositories (names, descriptions, star counts).
+    * Creates a new `Interview` record in the database, saving the GitHub metadata in a JSON column with status `Pre`.
+    * Returns the unique `interviewId`.
+4. The frontend redirects to `/interview/${interviewId}`.
+
+### Stage 2: Live Interview (`/interview/:interviewId` -> `Interview.tsx`)
+This is the core highlight of the application, utilizing **Realtime WebRTC Audio Streaming** paired with a **Backend WebSocket Sideband** control and **Browser Deepgram Transcription**.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Candidate as Candidate
-    participant FE as Candidate UI (WebRTC)
-    participant Orch as Session Orchestrator
-    participant Parser as Resume Parser
-    participant AI as AI Engine (LLM)
-    participant STT as STT Service
-    participant TTS as TTS Service
-    participant Av as Avatar Generator
+    participant Browser as Candidate Browser
+    participant Backend as Express Backend
+    participant OpenAI as OpenAI Realtime API
+    participant Deepgram as Deepgram WS API
+    participant DB as PostgreSQL DB
 
-    %% Step 1: Profile creation
-    Candidate->>FE: Upload Resume (PDF)
-    FE->>Orch: Post Resume Document
-    Orch->>Parser: Parse Resume
-    Parser-->>Orch: Candidate Profile JSON
-    Orch-->>FE: Profile Created & Confirmed
+    Browser->>Browser: Get Microhpone Stream (getUserMedia)
+    Browser->>Browser: Create RTCPeerConnection & Add Audio Track
+    Browser->>Browser: Create WebRTC SDP Offer
+    Browser->>Backend: HTTP POST /api/v1/session/:interviewId (SDP Offer)
+    
+    rect rgb(30, 30, 40)
+        Note over Backend, OpenAI: WebRTC SDP Exchange Proxy
+        Backend->>OpenAI: POST https://api.openai.com/v1/realtime/calls (SDP Offer)
+        OpenAI-->>Backend: Return SDP Answer & Call Location Header
+        Backend->>Browser: Return SDP Answer
+        Browser->>Browser: Set Remote Description
+    end
+    
+    Note over Browser, OpenAI: Direct WebRTC Audio Stream Established!
 
-    %% Step 2: Interview Loop
-    Note over Candidate, FE: Interview Session Starts
-    Orch->>AI: Generate Initial Question (based on Profile)
-    AI-->>Orch: Text Question
-    Orch->>TTS: Synthesize Question
-    TTS-->>Orch: Audio Stream
-    Orch->>Av: Generate Avatar Animation
-    Av-->>Orch: Video/Audio Stream
-    Orch->>FE: Stream Question (WebRTC Video+Audio)
-    FE->>Candidate: Plays Avatar Video & Audio Question
-
-    rect rgb(240, 248, 255)
-        Note right of Candidate: Answer Phase (Loop)
-        Candidate->>FE: Speaks Answer (Video + Audio)
-        FE->>Orch: Real-Time WebRTC Media Stream
-        Orch->>STT: Transcribe Audio
-        STT-->>Orch: Transcribed Text Answer
-        Orch->>AI: Send Answer Text
-        AI->>AI: Evaluate Answer & Generate Follow-up
-        AI-->>Orch: Next Question Text
-        Orch->>TTS: Synthesize Next Question
-        TTS-->>Orch: Audio Stream
-        Orch->>Av: Generate Avatar Animation
-        Av-->>Orch: Video/Audio Stream
-        Orch->>FE: Stream Next Question (WebRTC)
-        FE->>Candidate: Plays next question
+    rect rgb(40, 30, 40)
+        Note over Backend, OpenAI: WebSocket Sideband Session Setup
+        Backend->>OpenAI: Connect to wss://api.openai.com/v1/realtime?call_id=callId
+        Backend->>DB: Fetch Candidate's GitHub Metadata
+        Backend->>OpenAI: Send 'session.update' with GitHub-Tailored Instructions
     end
 
-    %% Step 3: Reporting
-    Note over Candidate, FE: Interview Session Ends
-    Orch->>AI: Generate Final Evaluation
-    AI->>AI: Calculate Scores & Analyze Weaknesses/Strengths
-    AI-->>Orch: Final Report (Scores, Match, Feedback)
-    Orch-->>FE: Display Final Report
+    rect rgb(30, 40, 30)
+        Note over Browser, Deepgram: Live User Transcription (Stated as fallback)
+        Browser->>Deepgram: Open WebSocket (wss://api.deepgram.com/v1/listen)
+        loop Every 250ms
+            Browser->>Deepgram: Send Mic Audio Chunks (webm)
+            Deepgram-->>Browser: Return Transcript Text
+            Browser->>Backend: POST /api/v1/session/user/response/:interviewId (Message Text)
+            Backend->>DB: Save User message in Database
+        end
+    end
+
+    loop Interview Conversation
+        OpenAI->>Browser: Stream Interviewer Voice (WebRTC Track)
+        Browser->>Browser: Render Voice Orb scale based on audio volume
+        OpenAI-->>Backend: Send WebSocket event 'response.done'
+        Backend->>DB: Extract AI Text Transcript and Save as Assistant Message
+    end
+
+    Browser->>Browser: User Clicks "End Interview" (Triggers Cleanup)
+    Browser->>Backend: Redirects to /result/:interviewId
 ```
+
+### Stage 3: Evaluation & Results (`/result/:interviewId` -> `Result.tsx`)
+1. The frontend redirects the user to `/result/:interviewId` and renders a loading state while polling the backend.
+2. The backend intercepts the first request at `GET /api/v1/result/:interviewId`:
+    * If the status is not `"Done"`, it queries the database for all saved `Message` models associated with this interview.
+    * It calls `calculateResult()`, which formats the conversation into a prompt and passes it to the **Google Gemini API** (`gemini-3.5-flash`) using structured JSON schemas.
+    * Gemini parses the transcript, awards a score out of 10, and writes constructive feedback.
+    * The backend updates the database record status to `"Done"` and saves the score and feedback text.
+3. The frontend retrieves the finished evaluation and renders:
+    * The overall score (out of 10) inside a visual feedback card.
+    * Detailed review/feedback recommendations.
+    * The chronological chat transcript (user messages matched alongside interviewer responses).
 
 ---
 
-## 🧩 Component Breakdown
+## 🛠️ Step-by-Step Guide to Replicating This Project
 
-### 1. Resume Parser & Profiler
-- **Ingestion**: Accepts PDF format resumes from the Candidate UI.
-- **Parsing Engine**: Extracts skills, experience timeline, education, and domain expertise.
-- **Output**: Generates a standardized Candidate Profile schema stored in the Database to prime the AI Interviewer.
+To build an identical project from scratch, follow these modular phases:
 
-### 2. Live WebRTC Orchestration
-- **Low-Latency Streaming**: Manages real-time audio and video ingestion from the candidate's camera and microphone.
-- **Signaling**: Connects and manages WebRTC peers.
-- **Broadcasting**: Streams generated AI avatar responses back to the candidate's browser with minimal delay.
+### Phase 1: Establish the Monorepo Infrastructure
+1. Initialize a new folder and set up workspaces:
+   ```bash
+   mkdir ai-interview-platform && cd ai-interview-platform
+   bun init
+   ```
+2. Configure `package.json` to enable workspaces:
+   ```json
+   "workspaces": [
+     "apps/*",
+     "packages/*"
+   ]
+   ```
+3. Initialize a Turborepo pipeline (`turbo.json`) to run build and dev configurations.
+4. Set up shared configurations (TypeScript, Prettier, ESLint) inside your `packages/` directory so apps can import standard configurations.
 
-### 3. Real-Time AI Pipeline
-- **Speech-To-Text (STT)**: Transcribes incoming audio streams to text in real-time.
-- **Language Models (LLM/SLM)**: 
-  - Evaluates the answers based on technical correctness and depth.
-  - Dynamically synthesizes custom follow-up questions tailored to the candidate's response.
-- **Text-To-Speech (TTS)**: Translates LLM generated follow-up text questions back to lifelike voice audio.
-- **Avatar/Video Generator**: Drives a photorealistic digital avatar with lip-synchronization aligned with the synthetic voice audio.
+### Phase 2: Design the Database Schema
+1. Create `apps/backend` and run:
+   ```bash
+   bun init
+   bun install prisma @prisma/client @prisma/adapter-pg pg express cors dotenv zod zod-to-json-schema axios
+   npx prisma init
+   ```
+2. Define the schema in `schema.prisma` containing:
+    * An `Interview` model (storing GitHub metadata json, score, feedback, status).
+    * A `Message` model (storing the message string, type (User/Assistant), relation to Interview, and timestamp).
+3. Connect your PostgreSQL database and run migrations:
+   ```bash
+   npx prisma migrate dev --name init
+   ```
 
-### 4. Evaluation & Reporting
-At the end of the session, the platform aggregates all data points to compile a **Final Candidate Report** containing:
-- **Technical Score**: Assessment of programming, architectural, and domain knowledge.
-- **Communication Score**: Evaluation of clarity, structure, and speaking pace.
-- **Confidence Level**: Behavioral indicators analyzed during the interview.
-- **Resume Match**: Similarity index between candidate answers/claims and the parsed resume data.
-- **Detailed Feedback**: Categorized breakdown of the candidate's **Strengths** and **Weaknesses**.
+### Phase 3: Implement WebRTC & AI Integrations in the Backend
+1. **GitHub Metadata Fetching:**
+   Write a utility that queries `https://api.github.com/users/{username}/repos` to return repository titles, stargazers count, and descriptions.
+2. **WebRTC Signaling Proxy Route (`/api/v1/session/:id`):**
+   Create a POST endpoint that takes the browser’s SDP offer. Use `fetch` to send it to the OpenAI realtime endpoint:
+   ```typescript
+   // Target URL: https://api.openai.com/v1/realtime/calls
+   // Content-Type: application/sdp
+   // Authorization: Bearer <OPENAI_KEY>
+   ```
+   Save the `Location` header returned by OpenAI (which contains the `callId`). Send the returned SDP answer back to the browser.
+3. **WebSocket Sideband Listener (`sideband.ts`):**
+   * Connect to `wss://api.openai.com/v1/realtime?call_id={callId}`.
+   * Send a `session.update` payload to inject the GitHub metadata as system instructions.
+   * Listen to `message` events. When `response.done` arrives, extract `parsedMessage.response.output[...].content` transcripts and commit them to your DB.
+4. **Evaluation Route (`/api/v1/result/:id`):**
+   Write a service that runs the Gemini API with structured outputs (`responseFormat: { text: { mimeType: "application/json", schema: ... } }`) to calculate scores and write feedback.
+
+### Phase 4: Build the React Client Web App
+1. Set up `apps/frontend` using standard React 19 templates.
+2. Configure a router with three routes: `/`, `/interview/:interviewId`, and `/result/:interviewId`.
+3. **Form Page:** Capture the GitHub profile and start the flow.
+4. **Interview Page:**
+    * Prompt the candidate for microphone access using `navigator.mediaDevices.getUserMedia()`.
+    * Set up `RTCPeerConnection`. Add the microphone track.
+    * Make the SDP handshake POST request to the backend.
+    * Attach the remote audio track (from the peer connection) to a hidden `<audio>` element with `autoplay={true}`.
+    * Setup a Deepgram WebSocket connection to transcribe speech and POST to `/session/user/response/:id` in real-time.
+    * Implement the volume visualizer utilizing the browser’s Web Audio API (`AudioContext` -> `createMediaStreamSource` -> `createAnalyser`) to drive CSS-scale properties of an SVG Orb in real-time.
+5. **Result Page:** Poll `/api/v1/result/:id` and display the generated metrics, feedback, and transcript bubbles.
+
+---
+
+> [!NOTE]
+> **Important API Key Prerequisites:**
+> To run this code, you will need active accounts and API keys from:
+> 1. **OpenAI** (supporting Realtime / WebRTC models)
+> 2. **Deepgram** (for real-time frontend speech-to-text)
+> 3. **Google AI Studio / Gemini** (for candidate evaluation)
+> 4. A **PostgreSQL database instance** (e.g. Supabase, Neon, or local PostgreSQL)
+
+> [!TIP]
+> **Ephemereal/Proxy Tokens:**
+> In production, avoid placing static API keys (like Deepgram or OpenAI) on the frontend. Establish an endpoint on your backend that generates temporary, short-lived tokens (e.g., Deepgram Ephemeral Keys) to keep credentials secure.
