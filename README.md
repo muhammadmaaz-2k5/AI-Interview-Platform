@@ -1,6 +1,15 @@
 # 🤖 AI Interview Platform
 
 An advanced, real-time AI-powered technical and communication interview platform. The system ingests candidate resumes, conducts interactive voice-and-video interviews using dynamic AI avatars, evaluates responses in real-time, and generates multi-dimensional performance reports.
+2 APPROCHES WE AND ONE OF THEM WE WILL BE HAVE TO FOLLOW FROM BELOW
+APPROCHE 1 LESS EXPENSIVE AND CHEAPER BUT SLOWER:
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/d0ecba26-e9db-4550-9cb6-0a7087779f0f" />
+
+APPROCHES 2 EXPENSIVE AND FASTER:
+<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/ab9a917d-1633-4713-8b56-ef5fdd3d4498" />
+
+
+
 <img width="1510" height="656" alt="image" src="https://github.com/user-attachments/assets/e57c224e-7543-4ae2-b0cb-d25690e9f1d5" />
 
 
