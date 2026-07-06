@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Technical Interviewer</title>
+  <!-- Google Fonts Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+          },
+          colors: {
+            accent: {
+              50: '#f5f3ff',
+              100: '#ede9fe',
+              500: '#8b5cf6',
+              600: '#7c3aed',
+              700: '#6d28d9',
+              800: '#5b21b6',
+              900: '#4c1d95',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #09090b; /* zinc-950 */
+      color: #fafafa;
+      font-family: 'Outfit', sans-serif;
+      overflow-x: hidden;
+    }
+    /* Sleek gradient background animations */
+    .bg-gradient-mesh {
+      background: radial-gradient(circle at 10% 20%, rgba(124, 58, 237, 0.1) 0%, transparent 40%),
+                  radial-gradient(circle at 90% 80%, rgba(91, 33, 182, 0.1) 0%, transparent 40%),
+                  #09090b;
+    }
+    /* Glassmorphism helpers */
+    .glass {
+      background: rgba(24, 24, 27, 0.65);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(63, 63, 70, 0.4);
+    }
+    .glass-premium {
+      background: linear-gradient(135deg, rgba(39, 39, 42, 0.5) 0%, rgba(24, 24, 27, 0.7) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .glass-border-glow:hover {
+      border-color: rgba(167, 139, 250, 0.4);
+      box-shadow: 0 0 20px rgba(139, 92, 246, 0.1);
+    }
+    /* Dynamic pulsing visuals */
+    @keyframes pulse-slow {
+      0%, 100% { transform: scale(1); opacity: 0.6; }
+      50% { transform: scale(1.05); opacity: 0.8; }
+    }
+    .pulse-glow {
+      animation: pulse-slow 4s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-gradient-mesh min-h-screen flex flex-col">
+  <div id="root"></div>
+  
+  <!-- Mount Compiled Bundle -->
+  <script type="module" src="/frontend.js"></script>
+</body>
+</html>

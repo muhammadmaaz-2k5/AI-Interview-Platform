@@ -1,0 +1,6 @@
+
+> frontend@0.0.0 build
+> C:\Users\asdfq\.bun\bin\bun.exe run build.ts
+
+📦 Starting frontend compilation via Bun.build...
+🚀 Frontend compilation completed successfully. Output in apps/frontend/dist/
