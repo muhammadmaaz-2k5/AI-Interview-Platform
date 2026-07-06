@@ -28,6 +28,8 @@ export function Interview() {
   
   // Ref to track read message IDs to avoid repeating speech
   const spokenMessagesRef = useRef<Set<string>>(new Set());
+  const speakerTimeoutRef = useRef<any>(null);
+  const processorNodeRef = useRef<ScriptProcessorNode | null>(null);
 
   useEffect(() => {
     // 1️⃣ Fetch interview details to get GitHub context
@@ -52,7 +54,7 @@ export function Interview() {
     };
   }, [interviewId]);
 
-  // Main session initializer
+  // Main session initializer using direct WebSocket stream to backend for Gemini Live API
   const startSession = async () => {
     try {
       // Get audio permissions
@@ -62,60 +64,61 @@ export function Interview() {
       // Start volume analyser
       setupVolumeAnalyser(stream);
 
-      // Create dummy/real SDP offer to negotiate WebRTC proxy
-      const pc = new RTCPeerConnection();
-      peerConnectionRef.current = pc;
+      // Determine WebSocket protocol and target URL (connect directly to port 3001)
+      const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const backendHost = window.location.hostname;
+      const wsUrl = `${wsProtocol}//${backendHost}:3001/api/v1/live-interview/${interviewId}`;
 
-      // Add local track to WebRTC
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      console.log(`🔌 Connecting to backend Live WebSocket: ${wsUrl}`);
+      const socket = new WebSocket(wsUrl);
+      deepgramWsRef.current = socket;
 
-      // Capture incoming audio tracks
-      pc.ontrack = (event) => {
-        if (audioElRef.current && event.streams[0]) {
-          audioElRef.current.srcObject = event.streams[0];
-          toast.success("AI audio stream connected.");
+      socket.onopen = () => {
+        console.log("✅ Live WebSocket connection established.");
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          
+          if (payload.type === "ready") {
+            if (payload.isMock) {
+              setIsMockMode(true);
+              setStatus("idle");
+              setInterviewerText(`Greeting candidate... Welcome to your interview simulation.`);
+              toast.info("Gemini Live API key missing. Mock simulation activated.", { duration: 5000 });
+              setupSimulationMode();
+            } else {
+              setStatus("listening");
+              setInterviewerText("Connected to Gemini Live. Start speaking to begin the interview.");
+              toast.success("Connected to Gemini Live API.");
+              setupGeminiMicCapture(stream, socket);
+            }
+          } else if (payload.type === "audio") {
+            playPcmChunk(payload.data);
+          } else if (payload.type === "error") {
+            toast.error(`Gemini Error: ${payload.message}`);
+          }
+        } catch (e) {
+          console.error("Error reading WebSocket packet:", e);
         }
       };
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+      socket.onerror = (err) => {
+        console.error("WebSocket connection error:", err);
+        throw new Error("Failed to connect live WebSocket.");
+      };
 
-      // Send SDP offer to backend
-      const res = await fetch(`/api/v1/session/${interviewId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sdp: offer.sdp }),
-      });
+      socket.onclose = () => {
+        console.log("WebSocket connection closed.");
+      };
 
-      if (!res.ok) {
-        throw new Error("API call failed to establish audio session.");
-      }
-
-      const sessionResult = await res.json();
-
-      if (sessionResult.isMock) {
-        // Backend doesn't have keys, activate simulation mode
-        setIsMockMode(true);
-        setStatus("idle");
-        setInterviewerText(`Greeting ${githubUser || "candidate"}... Welcome to your interview simulation.`);
-        toast.info("OpenAI API key missing. Mock simulation activated.", { duration: 5000 });
-        setupSimulationMode();
-      } else {
-        // WebRTC SDP Answer received
-        await pc.setRemoteDescription(
-          new RTCSessionDescription({ type: "answer", sdp: sessionResult.sdp })
-        );
-        setStatus("listening");
-        setInterviewerText("Connected. Speak to begin your interview.");
-        setupDeepgramAudioStreaming();
-      }
     } catch (err: any) {
       console.error(err);
-      toast.error("Failed to connect mic or database: " + err.message);
-      // Fallback directly to simulation mode if hardware mic or backend fails
+      toast.error("Failed to connect mic or live session: " + err.message);
       setIsMockMode(true);
       setStatus("idle");
-      setInterviewerText("Entering mock chat simulation mode (No WebRTC/Microphone connection).");
+      setInterviewerText("Entering mock chat simulation mode (No Live/Microphone connection).");
       setupSimulationMode();
     }
   };
@@ -159,6 +162,113 @@ export function Interview() {
       checkVolume();
     } catch (e) {
       console.error("Audio Context initialization failed:", e);
+    }
+  };
+
+  // Helper to convert array buffer to base64
+  const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  };
+
+  // Helper to capture raw 16kHz PCM audio and send it to WebSocket
+  const setupGeminiMicCapture = (stream: MediaStream, socket: WebSocket) => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = audioContextRef.current || new AudioContextClass();
+      audioContextRef.current = ctx;
+
+      const source = ctx.createMediaStreamSource(stream);
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      processorNodeRef.current = processor;
+      
+      source.connect(processor);
+      processor.connect(ctx.destination);
+      
+      processor.onaudioprocess = (e) => {
+        if (isMuted) return;
+        
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        // Downsample input rate to 16kHz linear PCM
+        const inputSampleRate = ctx.sampleRate;
+        const outputSampleRate = 16000;
+        const ratio = inputSampleRate / outputSampleRate;
+        const outputLength = Math.round(inputData.length / ratio);
+        const result = new Int16Array(outputLength);
+        
+        for (let i = 0; i < outputLength; i++) {
+          const index = Math.round(i * ratio);
+          const sample = Math.max(-1, Math.min(1, inputData[index]));
+          result[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+        }
+        
+        if (socket.readyState === WebSocket.OPEN) {
+          const base64Audio = arrayBufferToBase64(result.buffer);
+          socket.send(JSON.stringify({ type: "audio", data: base64Audio }));
+        }
+      };
+    } catch (e) {
+      console.error("Failed to setup microphone capture node:", e);
+    }
+  };
+
+  // Helper to play back 24kHz linear PCM audio chunks received from Gemini Live
+  const playPcmChunk = (base64Data: string) => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = audioContextRef.current || new AudioContextClass();
+      audioContextRef.current = ctx;
+
+      const binaryString = window.atob(base64Data);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      const int16Array = new Int16Array(bytes.buffer);
+      const floatArray = new Float32Array(int16Array.length);
+      for (let i = 0; i < int16Array.length; i++) {
+        floatArray[i] = int16Array[i] / 32768.0;
+      }
+
+      const audioBuffer = ctx.createBuffer(1, floatArray.length, 24000);
+      audioBuffer.copyToChannel(floatArray, 0);
+
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      
+      if (analyserRef.current) {
+        source.connect(analyserRef.current);
+      }
+      
+      // Calculate output speaking volume for VoiceOrb
+      let sum = 0;
+      for (let i = 0; i < floatArray.length; i++) {
+        sum += Math.abs(floatArray[i]);
+      }
+      const avg = sum / floatArray.length;
+      setVolume(Math.min(1, avg * 3.5));
+      
+      setStatus("speaking");
+      if (speakerTimeoutRef.current) {
+        clearTimeout(speakerTimeoutRef.current);
+      }
+      speakerTimeoutRef.current = setTimeout(() => {
+        setStatus("listening");
+        setVolume(0);
+      }, 1000);
+      
+      source.start();
+    } catch (e) {
+      console.error("PCM playing error:", e);
     }
   };
 
@@ -234,9 +344,11 @@ export function Interview() {
       if (!res.ok) {
         throw new Error("Failed to upload response");
       }
-      
-      // Let the backend process. Under simulation mode,
-      // it will trigger a timed message from the AI interviewer.
+
+      // If we have an active WebSocket connection, send it to Gemini Live!
+      if (deepgramWsRef.current && deepgramWsRef.current.readyState === WebSocket.OPEN && !isMockMode) {
+        deepgramWsRef.current.send(JSON.stringify({ type: "text", data: text }));
+      }
     } catch (err) {
       console.error("Error sending transcript response:", err);
       toast.error("Failed to transmit transcription to backend.");
@@ -377,6 +489,12 @@ export function Interview() {
     }
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
+    }
+    if (processorNodeRef.current) {
+      processorNodeRef.current.disconnect();
+    }
+    if (speakerTimeoutRef.current) {
+      clearTimeout(speakerTimeoutRef.current);
     }
   };
 
