@@ -1,19 +1,38 @@
 # 🤖 AI Interview Platform
 
-An advanced, real-time AI-powered technical and communication interview platform. The system ingests candidate resumes, conducts interactive voice-and-video interviews using dynamic AI avatars, evaluates responses in real-time, and generates multi-dimensional performance reports.
-2 APPROCHES WE AND ONE OF THEM WE WILL BE HAVE TO FOLLOW FROM BELOW
-APPROCHE 1 LESS EXPENSIVE AND CHEAPER BUT SLOWER:
-<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/d0ecba26-e9db-4550-9cb6-0a7087779f0f" />
-
-APPROCHES 2 EXPENSIVE AND FASTER:
-<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/ab9a917d-1633-4713-8b56-ef5fdd3d4498" />
-
-
-
-<img width="1510" height="656" alt="image" src="https://github.com/user-attachments/assets/e57c224e-7543-4ae2-b0cb-d25690e9f1d5" />
-
+An advanced, real-time AI-powered technical and communication interview platform. The platform ingests candidate resumes, conducts interactive voice-and-video interviews using dynamic AI avatars, evaluates responses in real-time, and generates multi-dimensional performance reports.
 
 ---
+
+## 🚀 Implementation Approaches
+
+We have designed two architectural approaches for the platform's execution, depending on latency requirements and budget considerations:
+
+### 📋 Platform Entry & Core Requirements
+The platform's entry workflow involves resume parsing and launching the live WebRTC video interview.
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/e57c224e-7543-4ae2-b0cb-d25690e9f1d5" alt="Platform Entry & Requirements" width="85%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);" />
+</p>
+
+---
+
+### 🐢 Approach 1: Pipeline-Based (Cost-Effective but Slower)
+This architecture relies on a sequential pipeline (STT ➡️ LLM ➡️ TTS ➡️ Avatar Generator). While highly cost-effective and easily customizable, it operates on a turn-based dialogue pattern with higher transition latency.
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/d0ecba26-e9db-4550-9cb6-0a7087779f0f" alt="Approach 1: Pipeline-Based Architecture" width="90%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);" />
+</p>
+
+---
+
+### ⚡ Approach 2: End-to-End Voice Models (Premium & Ultra-Fast)
+This architecture streams real-time audio from the browser to an end-to-end native voice model (e.g., Gemini Live API / GPT-4o Realtime) via a WebRTC server. It offers a near-zero latency, human-like conversational experience but incurs higher streaming costs.
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/ab9a917d-1633-4713-8b56-ef5fdd3d4498" alt="Approach 2: Native Voice Model Architecture" width="90%" style="border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);" />
+</p>
+
 
 ## 🏗️ System Architecture
 
