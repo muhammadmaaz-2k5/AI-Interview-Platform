@@ -20,16 +20,16 @@ export class Interview
   extends Model<InterviewAttributes, InterviewCreationAttributes>
   implements InterviewAttributes
 {
-  public id!: string;
-  public githubUrl!: string;
-  public githubMetadata!: any;
-  public status!: "Pre" | "In-Progress" | "Done";
+  declare public id: string;
+  declare public githubUrl: string;
+  declare public githubMetadata: any;
+  declare public status: "Pre" | "In-Progress" | "Done";
   public readonly messages?: Message[];
-  public score!: number | null;
-  public feedback!: any | null;
+  declare public score: number | null;
+  declare public feedback: any | null;
 
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare public readonly createdAt: Date;
+  declare public readonly updatedAt: Date;
 }
 
 Interview.init(

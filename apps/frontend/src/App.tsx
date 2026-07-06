@@ -15,7 +15,7 @@ export function App() {
             <Cpu className="w-6 h-6 animate-pulse" />
           </div>
           <span className="font-semibold text-lg bg-gradient-to-r from-purple-300 to-indigo-200 bg-clip-text text-transparent tracking-wide">
-            Antigravity AI Interviewer
+            FastInterview
           </span>
         </Link>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-400">
@@ -36,7 +36,7 @@ export function App() {
       {/* Footer bar */}
       <footer className="py-6 border-t border-zinc-900 text-center text-xs text-zinc-600 flex flex-col sm:flex-row justify-between items-center px-12 gap-2">
         <div>
-          &copy; {new Date().getFullYear()} Antigravity Systems. All rights reserved.
+          &copy; {new Date().getFullYear()} FastInterview. Created by Muhammad Maaz. All rights reserved.
         </div>
         <div className="flex gap-4">
           <a href="#" className="hover:text-zinc-400 transition-colors">Privacy</a>

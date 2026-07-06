@@ -17,13 +17,13 @@ export class Message
   extends Model<MessageAttributes, MessageCreationAttributes>
   implements MessageAttributes
 {
-  public id!: string;
-  public interviewId!: string;
-  public role!: "User" | "Assistant";
-  public content!: string;
+  declare public id: string;
+  declare public interviewId: string;
+  declare public role: "User" | "Assistant";
+  declare public content: string;
 
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare public readonly createdAt: Date;
+  declare public readonly updatedAt: Date;
 }
 
 Message.init(
