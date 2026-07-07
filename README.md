@@ -1,5 +1,10 @@
 # AI Interviewer - Project Analysis & Replication Guide
 
+<img width="1894" height="1138" alt="image" src="https://github.com/user-attachments/assets/9b1842eb-00ee-4842-8155-0f1bb706d72e" />
+<img width="1894" height="1621" alt="image" src="https://github.com/user-attachments/assets/5b1bc715-944f-4f17-9958-8efbc5aa0c31" />
+<img width="1894" height="1342" alt="image" src="https://github.com/user-attachments/assets/69ef47fd-0cc7-4fd6-8f0e-c465787c19c5" />
+
+
 This document provides a comprehensive analysis of the **AI Interviewer** project. It details the architecture, the technology stack, the exact workflow of how it works under the hood, and provides a guide on how you can build a similar project from scratch.
 
 ---
