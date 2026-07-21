@@ -1,6 +1,8 @@
 import WebSocket from "ws";
 import { Message } from "./models/Message";
 import { Interview } from "./models/Interview";
+import { GoogleGenAI } from "@google/genai";
+
 
 export function setupOpenAISideband(callId: string, interviewId: string, githubMetadata: any) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -160,3 +162,140 @@ function startSimulationMode(interviewId: string, githubMetadata: any) {
     }
   }, 3000);
 }
+
+/**
+ * Manages the real-time dynamic Gemini technical interview.
+ * Calls Gemini API to dynamically generate questions based on the candidate's
+ * GitHub repositories and active conversation replies.
+ */
+export function setupGeminiSideband(interviewId: string, githubMetadata: any) {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    console.warn("⚠️ GEMINI_API_KEY not configured. Running WebSocket sideband in simulation mode.");
+    startSimulationMode(interviewId, githubMetadata);
+    return;
+  }
+
+  console.log(`📡 Starting dynamic Gemini assessment sideband for interview: ${interviewId}`);
+  const ai = new GoogleGenAI({ apiKey });
+  startGeminiInterviewer(interviewId, githubMetadata, ai);
+}
+
+async function startGeminiInterviewer(interviewId: string, githubMetadata: any, ai: GoogleGenAI) {
+  const username = githubMetadata.username || "Candidate";
+  const reposText = (githubMetadata.repos || [])
+    .map((r: any) => `- Name: ${r.name}, Lang: ${r.language}, Stars: ${r.stars}. Desc: ${r.description}`)
+    .join("\n");
+
+  const systemInstructions = `
+You are a senior technical interviewer conducting a coding and systems design chat.
+The candidate's GitHub repositories list is as follows:
+${reposText}
+
+Please ask technical questions related to these technologies or general engineering best practices. Maintain a helpful yet rigorous tone. Ask one concise question at a time.
+Do not evaluate or summarize their answers during the interview. Only ask the questions.
+Keep track of the number of questions asked in the transcript.
+Once you have asked 4 questions in total and the candidate has replied to them, wrap up the interview by outputting exactly: 'Great. Thank you for your time today. I will wrap up our conversation and process your full evaluation. Good luck!'.
+`;
+
+  // Helper to generate a question using Gemini
+  async function generateQuestion(allMessages: any[]): Promise<string> {
+    try {
+      const transcript = allMessages
+        .map((m) => `${m.role === "User" ? "Candidate" : "Interviewer"}: ${m.content}`)
+        .join("\n");
+
+      const prompt = `
+System instructions:
+${systemInstructions}
+
+Current conversation history:
+${transcript || "No history yet. Start with a greeting and the first question based on their profile and repositories."}
+
+Task: Respond as the Interviewer. Remember to ask exactly one concise question, or end the interview with the closing statement if 4 questions have already been answered.
+`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+      });
+
+      return response.text?.trim() || "Could you tell me more about your recent project?";
+    } catch (err) {
+      console.error("❌ Gemini API call failed in sideband interviewer:", err);
+      return "Could you describe the main architectural decisions in your GitHub repositories?";
+    }
+  }
+
+  // Insert initial question in DB after 2 seconds if no messages exist yet
+  setTimeout(async () => {
+    try {
+      const existingMessages = await Message.findAll({ where: { interviewId } });
+      if (existingMessages.length === 0) {
+        const initialQuestion = await generateQuestion([]);
+        await Message.create({
+          interviewId,
+          role: "Assistant",
+          content: initialQuestion,
+        });
+        console.log(`🤖 Gemini Initial question inserted for interview ${interviewId}`);
+      }
+    } catch (err) {
+      console.error("Failed to insert initial Gemini question:", err);
+    }
+  }, 2000);
+
+  // Interval checking for new User responses to trigger the next dynamic question
+  let isGenerating = false;
+  const intervalId = setInterval(async () => {
+    try {
+      const interview = await Interview.findByPk(interviewId);
+      if (!interview || interview.status === "Done") {
+        clearInterval(intervalId);
+        return;
+      }
+
+      // Check messages
+      const messages = await Message.findAll({
+        where: { interviewId },
+        order: [["createdAt", "ASC"]],
+      });
+
+      if (messages.length > 0) {
+        const lastMsg = messages[messages.length - 1];
+        
+        // If last message is from user and we aren't already generating a question
+        if (lastMsg.role === "User" && !isGenerating) {
+          isGenerating = true;
+          console.log(`🤖 User replied. Requesting next question from Gemini...`);
+
+          setTimeout(async () => {
+            try {
+              const nextQuestion = await generateQuestion(messages);
+              await Message.create({
+                interviewId,
+                role: "Assistant",
+                content: nextQuestion,
+              });
+              console.log(`🤖 Gemini question inserted: "${nextQuestion}"`);
+              
+              // If the generated question is the closing statement, we can mark the interview as Done
+              if (nextQuestion.includes("wrap up our conversation and process your full evaluation")) {
+                console.log(`🤖 Gemini wrapping up interview ${interviewId}`);
+                clearInterval(intervalId);
+              }
+            } catch (err) {
+              console.error("Failed to generate/insert Gemini follow-up:", err);
+            } finally {
+              isGenerating = false;
+            }
+          }, 1500); // Small delay to feel natural
+        }
+      }
+    } catch (err) {
+      console.error("Error in Gemini sideband loop:", err);
+    }
+  }, 2000);
+}
+

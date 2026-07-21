@@ -15,6 +15,7 @@ export function Interview() {
   const [interviewerText, setInterviewerText] = useState("Establishing secure streaming connection...");
   const [typedResponse, setTypedResponse] = useState("");
   const [isMockMode, setIsMockMode] = useState(false);
+  const [isGeminiMode, setIsGeminiMode] = useState(false);
   const [githubUser, setGithubUser] = useState("");
 
   // Refs for audio API and connections
@@ -93,7 +94,13 @@ export function Interview() {
 
       const sessionResult = await res.json();
 
-      if (sessionResult.isMock) {
+      if (sessionResult.isGemini) {
+        setIsGeminiMode(true);
+        setStatus("idle");
+        setInterviewerText(`Greeting ${githubUser || "candidate"}... Welcome to your Google Gemini interview assessment.`);
+        toast.success("Google Gemini Voice Assessment activated.", { duration: 5000 });
+        setupSimulationMode();
+      } else if (sessionResult.isMock) {
         // Backend doesn't have keys, activate simulation mode
         setIsMockMode(true);
         setStatus("idle");
@@ -398,6 +405,13 @@ export function Interview() {
           </div>
           
           <div className="flex items-center gap-3">
+            {isGeminiMode && (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-semibold">
+                <ShieldAlert className="w-3.5 h-3.5 text-purple-400" />
+                <span>Gemini Active</span>
+              </div>
+            )}
+            
             {isMockMode && (
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-xs font-semibold">
                 <ShieldAlert className="w-3.5 h-3.5" />
@@ -419,7 +433,15 @@ export function Interview() {
                   ? "bg-emerald-400 animate-ping"
                   : "bg-zinc-500"
               }`}></span>
-              <span>{status === "speaking" ? "Interviewer Speaking" : status === "listening" ? "Listening to You" : "Processing"}</span>
+              <span>
+                {status === "speaking"
+                  ? isGeminiMode
+                    ? "Gemini Speaking"
+                    : "Interviewer Speaking"
+                  : status === "listening"
+                  ? "Listening to You"
+                  : "Processing"}
+              </span>
             </div>
           </div>
         </div>

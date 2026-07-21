@@ -5,7 +5,7 @@ import axios from "axios";
 import { initDb, Interview, Message } from "./models";
 import { PreInterviewSchema } from "./types";
 import { scrapeGitHubProfile } from "./scrapers/github";
-import { setupOpenAISideband } from "./sideband";
+import { setupOpenAISideband, setupGeminiSideband } from "./sideband";
 import { calculateInterviewResult } from "./result";
 
 dotenv.config();
@@ -63,6 +63,20 @@ app.post("/api/v1/session/:id", async (req, res) => {
 
     interview.status = "In-Progress";
     await interview.save();
+
+    // Prioritize Google Gemini Dynamic Interviewer if GEMINI_API_KEY is configured
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (geminiApiKey) {
+      console.log(`📡 Starting dynamic Gemini real-time interviewer for session: ${id}`);
+      setupGeminiSideband(id, interview.githubMetadata);
+      
+      return res.json({
+        sdp: null,
+        isMock: false,
+        isGemini: true,
+        message: "Gemini AI assessment session active.",
+      });
+    }
 
     // Check OpenAI API key
     const apiKey = process.env.OPENAI_API_KEY;
