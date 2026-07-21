@@ -2,30 +2,33 @@ import { sequelize, ensureDatabaseExists } from "../db";
 import { Interview } from "./Interview";
 import { Message } from "./Message";
 
-// Define Associations
-Interview.hasMany(Message, {
-  foreignKey: "interviewId",
-  as: "messages",
-  onDelete: "CASCADE",
-});
+const databaseUrl = process.env.DATABASE_URL;
 
-Message.belongsTo(Interview, {
-  foreignKey: "interviewId",
-  as: "interview",
-});
+defineAssociations();
+
+export function defineAssociations() {
+  Interview.hasMany(Message, {
+    foreignKey: "interviewId",
+    as: "messages",
+    onDelete: "CASCADE",
+  });
+
+  Message.belongsTo(Interview, {
+    foreignKey: "interviewId",
+    as: "interview",
+  });
+}
 
 export { sequelize, Interview, Message };
 
 export async function initDb() {
   try {
-    // Ensure that the target database exists in PostgreSQL
-    await ensureDatabaseExists();
-
-    // Authenticate the connection
+    if (!databaseUrl) {
+      await ensureDatabaseExists();
+    }
     await sequelize.authenticate();
     console.log("🔒 Database authentication successful.");
     
-    // Sync models to schema (alter: true adjusts tables to match current models)
     await sequelize.sync({ alter: true });
     console.log("⚡ Database tables synchronized successfully.");
   } catch (error) {
